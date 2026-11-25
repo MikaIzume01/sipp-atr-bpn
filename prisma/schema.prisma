@@ -1,0 +1,139 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Service {
+  id           String               @id @default(cuid())
+  kode         String               @unique // e.g. "jualb", "roya", "sertifikat-pertama"
+  nama         String               // e.g. "Peralihan Hak - Jual Beli"
+  kategori     String               // e.g. "Peralihan Hak", "Pemberian Hak", "Pendaftaran"
+  deskripsi    String
+  dasarHukum   String
+  estimasiHari Int                  @default(5)
+  rumusBiaya   String               // Rumus perhitungan PNBP (teks/formula)
+  biayaTetap   Int                  @default(0) // Biaya nominal tetap jika ada
+  isBiayaRumus Boolean              @default(true) // Menghitung via (nilaiTanah * luas)/1000
+  isActive     Boolean              @default(true)
+  keterangan   String               // Keterangan khusus / catatan persyaratan
+  alurProses   String               // JSON array berisi tahapan SOP layanan
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  persyaratan  ServiceRequirement[]
+  permohonan   Application[]
+}
+
+model ServiceRequirement {
+  id           String               @id @default(cuid())
+  serviceId    String
+  service      Service              @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  namaDokumen  String               // e.g. "Formulir Permohonan bermeterai", "Sertifikat Asli"
+  deskripsi    String?
+  isWajib      Boolean              @default(true)
+  allowedTypes String               @default("pdf,jpg,png")
+  maxSizeMB    Int                  @default(5)
+  urutan       Int                  @default(0)
+  templateUrl  String?              // Link jika disediakan template dokumen blanko
+
+  dokumen      ApplicationDocument[]
+}
+
+model Application {
+  id               String                @id @default(cuid())
+  nomorRegistrasi  String                @unique // e.g. "REG-202611-0012"
+  accessPin        String                // 6 digit PIN untuk keamanan tracking publik
+  serviceId        String
+  service          Service               @relation(fields: [serviceId], references: [id])
+  tipePemohon      String                @default("SENDIRI") // "SENDIRI" | "KUASA"
+  namaPemohon      String
+  nikPemohon       String
+  noWhatsapp       String
+  email            String?
+  alamatPemohon    String
+  namaKuasa        String?
+  nikKuasa         String?
+  noSuratKuasa     String?
+  dataObjek        String                // JSON string data objek pertanahan / layanan
+  estimasiBiaya    Int                   @default(0)
+  status           String                @default("DIAJUKAN") // "DIAJUKAN", "DIVERIFIKASI", "PERLU_REVISI", "DIPROSES", "SELESAI", "DITOLAK"
+  catatanRevisi    String?
+  nomorSK          String?               // Nomor produk hukum/sertifikat yang terbit
+  tanggalPengajuan DateTime              @default(now())
+  tanggalSelesai   DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  dokumen          ApplicationDocument[]
+  logs             ApplicationLog[]
+}
+
+model ApplicationDocument {
+  id                String             @id @default(cuid())
+  applicationId     String
+  application       Application        @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  requirementId     String
+  requirement       ServiceRequirement @relation(fields: [requirementId], references: [id])
+  originalFilename  String
+  storedFilename    String
+  filePath          String
+  fileSize          Int
+  mimeType          String
+  statusVerifikasi  String             @default("PENDING") // "PENDING", "VALID", "TIDAK_VALID"
+  catatanVerifikasi String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model ApplicationLog {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  statusLama    String?
+  statusBaru    String
+  aktor         String      @default("SISTEM") // "SISTEM", "PEMOHON", "PETUGAS"
+  namaPetugas   String?
+  catatan       String
+  createdAt     DateTime    @default(now())
+}
+
+model User {
+  id                String   @id @default(cuid())
+  username          String   @unique
+  email             String?  @unique
+  namaLengkap       String
+  role              String   @default("WARGA") // "ADMIN", "VERIFIKATOR", "KEPALA_KANTOR", "WARGA"
+  passwordHash      String
+  nip               String?
+  nik               String?
+  noWhatsapp        String?
+  alamat            String?
+  isVerified        Boolean  @default(true)
+  verificationToken String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Complaint {
+  id               String    @id @default(cuid())
+  nomorTiket       String    @unique // e.g. "DUMAS-202611-1234"
+  namaPelapor      String
+  nikPelapor       String
+  noWhatsapp       String
+  email            String?
+  kategori         String    // "PELAYANAN_LOKET", "KETERLAMBATAN_SOP", "DUGAAN_PUNGLI", "SENGKETA_BATAS", "INFORMASI_TIDAK_JELAS", "LAINNYA"
+  nomorBerkas      String?   // No berkas atau sertifikat jika ada
+  uraian           String    // Detail laporan keluhan
+  status           String    @default("BARU") // "BARU", "DIPERIKSA", "DITINDAKLANJUTI", "SELESAI", "DITOLAK"
+  tanggapanPetugas String?   // Catatan / solusi tindak lanjut dari petugas
+  namaPetugas      String?   // Nama petugas yang menindaklanjuti
+  tanggalSelesai   DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
